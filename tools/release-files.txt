@@ -36,6 +36,7 @@ sync_bridge.py
 sync_validation.py
 tests/browser-server.cjs
 tests/browser-smoke.cjs
+tests/mobile-layout.cjs
 tests/sync-core.test.js
 tests/sync-integration.cjs
 tests/test_git_workflow.py

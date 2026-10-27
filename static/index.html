@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>个人成长面板</title>
-  <link rel="stylesheet" href="style.css?v=20261002-mobile1">
+  <link rel="stylesheet" href="style.css?v=20261027-mobile2">
 </head>
 <body>
 <div class="app">
@@ -62,11 +62,11 @@
 
     <section id="view-schedule" class="view">
       <div class="panel">
-        <div class="toolbar">
+        <div class="toolbar schedule-toolbar">
           <div class="month-nav">
-            <button class="icon-btn small" id="calPrevBtn">◀</button>
+            <button class="icon-btn small" id="calPrevBtn" aria-label="上个月">◀</button>
             <div id="calTitle" class="month-title"></div>
-            <button class="icon-btn small" id="calNextBtn">▶</button>
+            <button class="icon-btn small" id="calNextBtn" aria-label="下个月">▶</button>
           </div>
           <div class="tabs" id="schedTabs">
             <button data-tab="today" class="active">今天</button>
@@ -75,9 +75,10 @@
             <button data-tab="done">已完成</button>
             <button data-tab="all">全部</button>
           </div>
-          <div class="flex1"></div>
-          <button class="btn" id="carryBtn" title="把今天之前未完成的事项移到今天">⏩ 顺延</button>
-          <button class="btn primary" data-modal="todo">＋ 添加日程</button>
+          <div class="schedule-actions">
+            <button class="btn" id="carryBtn" title="把今天之前未完成的事项移到今天">⏩ 顺延</button>
+            <button class="btn primary" data-modal="todo">＋ 添加日程</button>
+          </div>
         </div>
         <div id="calendar" class="calendar"></div>
       </div>
@@ -151,18 +152,18 @@
   </main>
 </div>
 
-<nav id="bottomNav" class="bottom-nav"></nav>
+<nav id="bottomNav" class="bottom-nav" aria-label="主导航"></nav>
 
 <div id="modalOverlay" class="modal-overlay" hidden>
-  <div class="modal" role="dialog" aria-modal="true">
-    <div class="modal-head"><h3 id="modalTitle"></h3><button class="icon-btn" id="modalClose" title="关闭">✕</button></div>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle" tabindex="-1">
+    <div class="modal-head"><h3 id="modalTitle"></h3><button class="icon-btn" id="modalClose" title="关闭" aria-label="关闭弹窗">✕</button></div>
     <div class="modal-body" id="modalBody"></div>
   </div>
 </div>
 
-<script src="sync-core.js?v=20261002-mobile1" defer></script>
-<script src="sync-client.js?v=20261002-mobile1" defer></script>
-<script src="sync-ui.js?v=20261002-mobile1" defer></script>
-<script src="app.js?v=20261002-mobile1" defer></script>
+<script src="sync-core.js?v=20261027-mobile2" defer></script>
+<script src="sync-client.js?v=20261027-mobile2" defer></script>
+<script src="sync-ui.js?v=20261027-mobile2" defer></script>
+<script src="app.js?v=20261027-mobile2" defer></script>
 </body>
 </html>

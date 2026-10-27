@@ -6,11 +6,15 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Build;
 import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
 import android.util.AtomicFile;
 import android.util.Base64;
 import android.view.View;
+import android.view.WindowInsets;
+import android.view.WindowInsetsController;
+import android.view.WindowManager;
 import android.webkit.*;
 import android.widget.EditText;
 import android.widget.FrameLayout;
@@ -45,12 +49,33 @@ public class MainActivity extends Activity {
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         local=new AtomicFile(new File(getFilesDir(),"offline-state.json"));
-        frame=new FrameLayout(this);web=new WebView(this);frame.addView(web);
+        frame=new FrameLayout(this);web=new WebView(this);
+        frame.addView(web,new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,FrameLayout.LayoutParams.MATCH_PARENT));
+        // One owner for system / gesture / keyboard insets. The WebView receives
+        // the remaining content area; CSS must not also guess navigation-bar sizes.
+        getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        if(Build.VERSION.SDK_INT>=30)getWindow().setDecorFitsSystemWindows(false);
+        else getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE|View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN|View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
         frame.setOnApplyWindowInsetsListener((v,insets)->{
-            v.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());
-            return insets.consumeSystemWindowInsets();
+            if(Build.VERSION.SDK_INT>=30){
+                android.graphics.Insets bars=insets.getInsets(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout()|WindowInsets.Type.ime());
+                android.graphics.Insets gestures=insets.getInsets(WindowInsets.Type.mandatorySystemGestures());
+                v.setPadding(bars.left,bars.top,bars.right,Math.max(bars.bottom,gestures.bottom));
+                return WindowInsets.CONSUMED;
+            }
+            int left=insets.getSystemWindowInsetLeft(),top=insets.getSystemWindowInsetTop(),right=insets.getSystemWindowInsetRight(),bottom=insets.getSystemWindowInsetBottom();
+            if(Build.VERSION.SDK_INT>=28 && insets.getDisplayCutout()!=null){
+                android.view.DisplayCutout cutout=insets.getDisplayCutout();
+                left=Math.max(left,cutout.getSafeInsetLeft());top=Math.max(top,cutout.getSafeInsetTop());
+                right=Math.max(right,cutout.getSafeInsetRight());bottom=Math.max(bottom,cutout.getSafeInsetBottom());
+            }
+            if(Build.VERSION.SDK_INT>=29)bottom=Math.max(bottom,insets.getMandatorySystemGestureInsets().bottom);
+            v.setPadding(left,top,right,bottom);
+            WindowInsets consumed=insets.consumeSystemWindowInsets().consumeStableInsets();
+            return Build.VERSION.SDK_INT>=28?consumed.consumeDisplayCutout():consumed;
         });
         setContentView(frame);
+        frame.post(()->frame.requestApplyInsets());
         WebSettings s=web.getSettings();s.setJavaScriptEnabled(true);s.setDomStorageEnabled(true);
         s.setAllowFileAccess(false);s.setAllowContentAccess(true);
         s.setAllowFileAccessFromFileURLs(false);s.setAllowUniversalAccessFromFileURLs(false);
@@ -136,7 +161,17 @@ public class MainActivity extends Activity {
                 int color=android.graphics.Color.parseColor(dark?"#0e1117":"#f5f6fa");
                 frame.setBackgroundColor(color);web.setBackgroundColor(color);
                 getWindow().setStatusBarColor(color);getWindow().setNavigationBarColor(color);
-                getWindow().getDecorView().setSystemUiVisibility(dark?0:View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
+                if(Build.VERSION.SDK_INT>=30){
+                    WindowInsetsController controller=getWindow().getInsetsController();
+                    int flags=WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS|WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
+                    if(controller!=null)controller.setSystemBarsAppearance(dark?0:flags,flags);
+                } else {
+                    View decor=getWindow().getDecorView();
+                    int light=View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+                    // Do not discard layout flags when toggling the theme.
+                    decor.setSystemUiVisibility((decor.getSystemUiVisibility()&~light)|(dark?0:light));
+                }
+                frame.requestApplyInsets();
             });
         }
         @JavascriptInterface public String readLocal(){

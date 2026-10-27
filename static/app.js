@@ -180,7 +180,7 @@ const MODALS = {
             <button type="button" data-v="expense" class="active">支出</button><button type="button" data-v="income">收入</button>
           </div>
         </div>
-        <label class="field">金额（元）<input type="number" id="transAmount" class="amount-input" min="0" step="0.01" required placeholder="0.00" autofocus></label>
+        <label class="field">金额（元）<input type="number" id="transAmount" class="amount-input" min="0" step="0.01" inputmode="decimal" required placeholder="0.00"></label>
         <div class="row2">
           <label class="field">分类<select id="transCategory"></select></label>
           <label class="field">日期<input type="date" id="transDate" required value="${todayISO()}"></label>
@@ -252,6 +252,66 @@ const MODALS = {
 };
 
 let modalType = null;
+let modalOrigin = null, modalScrollY = 0;
+const isPhoneLayout = () => window.matchMedia("(max-width: 860px)").matches;
+
+// Use the visible viewport on keyboard resize, with an innerHeight fallback
+// for older Android WebViews. Pinch zoom must remain available to the user.
+function updateViewportLayout() {
+  const root = document.documentElement;
+  const vv = window.visualViewport;
+  const unzoomed = vv && Math.abs(vv.scale - 1) < .01;
+  root.style.setProperty("--visual-height", `${unzoomed ? vv.height : innerHeight}px`);
+  root.style.setProperty("--visual-offset-top", `${unzoomed ? vv.offsetTop : 0}px`);
+  for (const [selector, name] of [["#bottomNav", "--bottom-nav-height"], [".topbar", "--topbar-height"]]) {
+    const height = Math.ceil($(selector).getBoundingClientRect().height);
+    const value = `${height}px`;
+    if (root.style.getPropertyValue(name) !== value) root.style.setProperty(name, value);
+  }
+}
+function keepModalFieldVisible() {
+  if ($("#modalOverlay").hidden) return;
+  const body = $("#modalBody"), field = document.activeElement;
+  if (!body.contains(field) || !field.matches("input:not([type=hidden]),select,textarea")) return;
+  const rect = field.getBoundingClientRect(), area = body.getBoundingClientRect();
+  const footer = field.closest("form")?.querySelector(".modal-actions");
+  const bottom = area.bottom - (footer?.getBoundingClientRect().height || 0) - 12;
+  if (rect.top < area.top + 8) body.scrollTop += rect.top - area.top - 8;
+  else if (rect.bottom > bottom) body.scrollTop += Math.min(rect.bottom - bottom, rect.top - area.top - 8);
+}
+function initViewportLayout() {
+  let raf = 0;
+  const update = () => {
+    cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(() => { updateViewportLayout(); keepModalFieldVisible(); });
+  };
+  window.addEventListener("resize", update);
+  window.visualViewport?.addEventListener("resize", update);
+  window.visualViewport?.addEventListener("scroll", update);
+  if (window.ResizeObserver) {
+    const observer = new ResizeObserver(update);
+    observer.observe($("#bottomNav")); observer.observe($(".topbar"));
+  }
+  updateViewportLayout();
+}
+function showModal(wide = false) {
+  const overlay = $("#modalOverlay"), modal = $(".modal");
+  if (overlay.hidden) {
+    modalOrigin = document.activeElement;
+    modalScrollY = window.scrollY;
+    document.body.style.top = `-${modalScrollY}px`;
+    document.body.classList.add("modal-open");
+    document.documentElement.classList.add("modal-open");
+  }
+  modal.classList.toggle("wide", wide);
+  modal.classList.remove("compact");
+  overlay.hidden = false;
+  $("#modalBody").scrollTop = 0;
+  updateViewportLayout();
+  // Do not open the software keyboard or jump down a long form on entry.
+  const first = isPhoneLayout() ? $("#modalClose") : $("#modalBody input:not([type=hidden]):not([type=file]), #modalBody textarea, #modalBody button");
+  (first || $("#modalClose")).focus({ preventScroll: true });
+}
 function setSeg(segId, val) {
   const seg = $("#" + segId); if (!seg) return;
   seg.querySelectorAll("button").forEach((b) => b.classList.toggle("active", b.dataset.v === val));
@@ -265,7 +325,6 @@ function openModal(type, editing = false) {
   const m = MODALS[type];
   $("#modalTitle").textContent = editing ? m.editTitle() : m.title();
   $("#modalBody").innerHTML = m.html();
-  $("#modalOverlay").hidden = false;
   if (type === "todo") {
     setTimeVal("todoStart", ""); setTimeVal("todoEnd", "");
     $("#todoRepeat").value = ""; $("#todoRepeatCountWrap").hidden = true; $("#todoRepeatHint").hidden = true;
@@ -273,12 +332,19 @@ function openModal(type, editing = false) {
   if (type === "trans") { refreshCatOptions(); refreshTripOptions(); autoPickTrip($("#transDate").value || todayISO()); }
   if (type === "settings") fillSettings();
   if (type === "deadline") setTimeVal("ddlTime", "");
-  const first = $("#modalBody input:not([type=hidden]), #modalBody textarea");
-  if (first && type !== "trans") setTimeout(() => first.focus(), 50);
+  showModal();
 }
 let modalCloseCallback = null;
 function closeModal() {
-  $("#modalOverlay").hidden = true; modalType = null; $(".modal").classList.remove("wide");
+  if ($("#modalOverlay").hidden) return;
+  if ($("#modalOverlay").contains(document.activeElement)) document.activeElement.blur();
+  $("#modalOverlay").hidden = true; modalType = null; $(".modal").classList.remove("wide", "compact");
+  document.body.classList.remove("modal-open");
+  document.documentElement.classList.remove("modal-open");
+  document.body.style.top = "";
+  window.scrollTo(0, modalScrollY);
+  if (modalOrigin?.isConnected) modalOrigin.focus({ preventScroll: true });
+  modalOrigin = null;
   if (modalCloseCallback) { const cb = modalCloseCallback; modalCloseCallback = null; cb(-1); }
   setTimeout(applyRemoteUpdates,0);
 }
@@ -286,7 +352,8 @@ function choiceDialog(title, buttons) {
   return new Promise((resolve) => {
     openWideModal(title, `<div class="choice-body">${buttons.map((b, i) =>
       `<button type="button" class="btn ${b.cls || ""}" style="width:100%;justify-content:center" data-choice="${i}">${b.label}</button>`).join("")}</div>`);
-    modalCloseCallback = resolve;
+    $(".modal").classList.add("compact");
+    modalCloseCallback = (value) => { $("#modalBody").removeEventListener("click", handler); resolve(value); };
     const handler = (e) => {
       const b = e.target.closest("[data-choice]");
       if (!b) return;
@@ -303,8 +370,7 @@ function openWideModal(title, html) {
   modalType = "subjectDetail";
   $("#modalTitle").textContent = title;
   $("#modalBody").innerHTML = html;
-  $(".modal").classList.add("wide");
-  $("#modalOverlay").hidden = false;
+  showModal(true);
 }
 function refreshTripOptions(selected) {
   const sel = $("#transTrip"); if (!sel) return;
@@ -338,9 +404,14 @@ function switchView(view) {
   if (!Object.hasOwn(TITLES, view)) view = "dashboard";
   state.view = view;
   $$(".view").forEach((v) => v.classList.toggle("active", v.id === "view-" + view));
-  $$("#nav button, #bottomNav button").forEach((b) => b.classList.toggle("active", b.dataset.view === view));
+  $$("#nav button, #bottomNav button").forEach((b) => {
+    b.classList.toggle("active", b.dataset.view === view);
+    if (b.dataset.view === view) b.setAttribute("aria-current", "page");
+    else b.removeAttribute("aria-current");
+  });
   $("#viewTitle").textContent = TITLES[view];
   render();
+  window.scrollTo(0, 0);
 }
 function render() {
   ({ dashboard: renderDashboard, schedule: renderSchedule, course: renderCourse, finance: renderFinance, deadline: renderDeadlines, review: renderReview }[state.view] || renderDashboard)();
@@ -435,7 +506,7 @@ function dayViewHTML(todos, date) {
       <div class="tl-rail"><div class="tl-dot ${t.done ? "done" : t.priority}"></div></div>
       <div class="tl-card ${t.done ? "done" : ""}">
         <div class="title">${esc(t.title)} ${t.carried ? '<span class="badge">顺延</span>' : ""}</div>
-        <div class="meta"><span class="badge ${t.priority}">${pri[t.priority] || "中"}</span>${t.repeat ? `<span class="badge">${esc(t.repeat)}</span>` : ""}${t.done ? '<span class="badge ok">已完成</span>' : ""}${t.note ? `<span>📝 ${esc(t.note)}</span>` : ""}</div>
+        <div class="meta"><span class="badge ${t.priority}">${pri[t.priority] || "中"}</span>${t.repeat ? `<span class="badge">${esc(t.repeat)}</span>` : ""}${t.done ? '<span class="badge ok">已完成</span>' : ""}${t.note ? `<span class="tl-note">📝 ${esc(t.note)}</span>` : ""}</div>
         <div class="ops" style="margin-top:8px">
           <button class="btn small" data-action="toggleTodoBtn">${t.done ? "↩ 撤销" : "✓ 完成"}</button>
           <button class="btn small" data-action="editTodo">编辑</button>
@@ -444,11 +515,11 @@ function dayViewHTML(todos, date) {
       </div>
     </div>`;
   return `<div class="panel">
-    <div class="toolbar" style="margin-bottom:2px">
-      <button class="btn small" data-action="dayPrev">◀ 前一天</button>
-      <h3 style="margin:0;flex:1;text-align:center">${date === todayISO() ? "今天 · " : ""}${fmtCN(date)}</h3>
-      <button class="btn small" data-action="dayNext">后一天 ▶</button>
-      <button class="btn primary small" data-modal="todo" data-date="${date}">＋ 添加到这天</button>
+    <div class="toolbar day-toolbar">
+      <button class="btn small day-step" data-action="dayPrev" aria-label="前一天">◀<span class="day-step-text">前一天</span></button>
+      <h3>${date === todayISO() ? "今天 · " : ""}${fmtCN(date).split(" ")[0]}<span class="day-weekday">${fmtCN(date).split(" ")[1]}</span></h3>
+      <button class="btn small day-step" data-action="dayNext" aria-label="后一天"><span class="day-step-text">后一天</span>▶</button>
+      <button class="btn primary small day-add" data-modal="todo" data-date="${date}">＋ 添加到这天</button>
     </div>
     ${timed.length ? `<div class="timeline">${timed.map(node).join("")}</div>` : ""}
     ${untimed.length ? `<div class="date-group-title" style="margin-top:16px">🕐 未安排具体时间（${untimed.length}）</div>${untimed.map((t) => todoItemHTML(t, true)).join("")}` : ""}
@@ -467,10 +538,10 @@ function renderSchedule() {
     const ds = `${state.calMonth}-${String(d).padStart(2, "0")}`;
     const ts = state.db.todos.filter((t) => t.date === ds);
     const done = ts.filter((t) => t.done).length;
-    cells += `<div class="cal-cell ${ds === today ? "today" : ""} ${state.schedTab === "date" && state.schedDate === ds ? "selected" : ""}" data-date="${ds}">
-      <div class="cal-day">${d}</div>
-      ${ts.length ? `<div class="cal-badge ${done === ts.length ? "all-done" : ""}">${done}/${ts.length}</div>` : ""}
-    </div>`;
+    cells += `<button type="button" class="cal-cell ${ds === today ? "today" : ""} ${state.schedTab === "date" && state.schedDate === ds ? "selected" : ""}" data-date="${ds}" aria-label="${ds}，${done}/${ts.length} 项完成" aria-pressed="${(state.schedTab === "date" && state.schedDate === ds) || (state.schedTab === "today" && ds === today)}" ${ds === today ? 'aria-current="date"' : ""}>
+      <span class="cal-day">${d}</span>
+      ${ts.length ? `<span class="cal-badge ${done === ts.length ? "all-done" : ""}">${done}/${ts.length}</span>` : ""}
+    </button>`;
   }
   $("#calendar").innerHTML = `<div class="cal-head">${["一", "二", "三", "四", "五", "六", "日"].map((w) => `<div>${w}</div>`).join("")}</div><div class="cal-grid">${cells}</div>`;
 
@@ -744,7 +815,7 @@ function renderFinance() {
   }
   $("#transList").innerHTML = all.length
     ? `<div class="date-group-title">${month} 共 ${all.length} 笔</div>${sortBy(all, ["date"], -1).map((t) => `
-      <div class="item" data-id="${t.id}">
+      <div class="item transaction-item" data-id="${t.id}">
         <div class="body">
           <div class="title">${esc(t.category)}${t.note ? " · " + esc(t.note) : ""}</div>
           <div class="meta"><span>${t.date}</span><span class="badge ${t.type}">${t.type === "income" ? "收入" : "支出"}</span>${t.tripId ? '<span class="badge">旅行</span>' : ""}</div>
@@ -768,7 +839,7 @@ function tripDetailHTML(trip) {
       <div class="trip-total" style="font-size:22px">${money(total)}</div>
     </div>
     ${Object.keys(byCat).length ? `<div class="panel slim" style="margin:10px 0">${Object.entries(byCat).sort((x, y) => y[1] - x[1]).map(([c, v]) => `<div class="legend-row"><span>${esc(c)}</span><b>${money(v)} · ${Math.round(v / total * 100)}%</b></div>`).join("")}</div>` : ""}
-    ${list.length ? list.map((t) => `<div class="item" data-id="${t.id}">
+    ${list.length ? list.map((t) => `<div class="item transaction-item" data-id="${t.id}">
       <div class="body"><div class="title">${esc(t.category)}${t.note ? " · " + esc(t.note) : ""}</div>
       <div class="meta"><span>${t.date}</span><span class="badge ${t.type}">${t.type === "income" ? "收入" : "支出"}</span></div></div>
       <b style="color:${t.type === "income" ? "var(--ok)" : "var(--danger)"}">${t.type === "income" ? "+" : "-"}${money(t.amount)}</b>
@@ -1003,15 +1074,24 @@ function submitTrans() {
 function bindEvents() {
   // 手机端底部导航（复用侧边栏定义）
   $("#bottomNav").innerHTML = $$("#nav button").map((b) => {
-    const label = b.innerHTML.replace(/<[^>]+>/g, "").trim();
-    return `<button data-view="${b.dataset.view}">${b.querySelector(".nav-ico").outerHTML}<span>${label}</span></button>`;
+    const label = b.cloneNode(true);
+    label.querySelector(".nav-ico").remove();
+    return `<button data-view="${b.dataset.view}" class="${b.classList.contains("active") ? "active" : ""}" ${b.classList.contains("active") ? 'aria-current="page"' : ""}><span class="nav-ico" aria-hidden="true">${b.querySelector(".nav-ico").textContent}</span><span>${esc(label.textContent.trim())}</span></button>`;
   }).join("");
   $$("#nav button, #bottomNav button").forEach((b) => b.addEventListener("click", () => switchView(b.dataset.view)));
   $("#themeBtn").addEventListener("click", toggleTheme);
   $("#settingsBtn").addEventListener("click", () => openModal("settings"));
   $("#modalClose").addEventListener("click", closeModal);
   $("#modalOverlay").addEventListener("click", (e) => { if (e.target === $("#modalOverlay")) closeModal(); });
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#modalOverlay").hidden) closeModal(); });
+  document.addEventListener("keydown", (e) => {
+    if ($("#modalOverlay").hidden) return;
+    if (e.key === "Escape") { e.preventDefault(); closeModal(); return; }
+    if (e.key !== "Tab") return;
+    const focusable = $$(".modal button, .modal input:not([type=hidden]), .modal select, .modal textarea, .modal a[href], .modal summary").filter(el => !el.disabled && el.getClientRects().length);
+    const first = focusable[0], last = focusable[focusable.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  });
 
   // 弹窗内：分段控件 / 关闭 / 文件导入 / 设置
   $("#modalBody").addEventListener("click", async (e) => {
@@ -1289,7 +1369,7 @@ window.addEventListener("error", (e) => {
   let b = $("#jsErrorBanner");
   if (!b) { b = document.createElement("div"); b.id = "jsErrorBanner"; b.className = "save-banner"; b.style.background = "#e5484d"; document.body.appendChild(b); }
   b.hidden = false;
-  b.textContent = "⚠️ 页面脚本出错：" + (e.message || "未知错误") + " —— 请按 Ctrl+F5 强制刷新；若持续出现请反馈";
+  b.textContent = "⚠️ 页面脚本出错：" + (e.message || "未知错误") + (DashboardSync.native ? " —— 请退出重开；若持续出现请反馈，请勿卸载或清除数据。" : " —— 请按 Ctrl+F5 强制刷新；若持续出现请反馈");
 });
 
 (async function init() {
@@ -1309,6 +1389,7 @@ window.addEventListener("error", (e) => {
   $("#financeMonth").value = state.financeMonth;
   $("#reviewDate").value = todayISO();
   bindEvents();
+  initViewportLayout();
   render();
   syncClient.status();
   syncClient.start();

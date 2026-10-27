@@ -1,1 +1,12 @@
-{"name":"personal-dashboard","private":true,"version":"1.0.0","scripts":{"test":"node tests/sync-core.test.js","test:browser":"node tests/browser-smoke.cjs && node tests/sync-integration.cjs"},"devDependencies":{"playwright":"1.63.0"}}
+{
+  "name": "personal-dashboard",
+  "private": true,
+  "version": "1.0.1",
+  "scripts": {
+    "test": "node tests/sync-core.test.js",
+    "test:browser": "node tests/browser-smoke.cjs && node tests/sync-integration.cjs && node tests/mobile-layout.cjs"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}

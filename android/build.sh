@@ -8,6 +8,15 @@ cd "$(dirname "$0")"
 export PATH="$JAVA_HOME/bin:$PATH"
 BT="$ANDROID_HOME/build-tools/35.0.0"
 JAR="$ANDROID_HOME/platforms/android-35/android.jar"
+VERSION=$(python3 - <<'VERSION_PY'
+import json,re,xml.etree.ElementTree as ET
+version=ET.parse('AndroidManifest.xml').getroot().get('{http://schemas.android.com/apk/res/android}versionName')
+if not re.fullmatch(r'\d+\.\d+\.\d+',version or '') or version!=json.load(open('../package.json'))['version']:
+    raise SystemExit('Manifest and package version must match (major.minor.patch).')
+print(version)
+VERSION_PY
+)
+APK="dist/personal-dashboard-$VERSION.apk"
 OUT="$PWD/build"
 mkdir -p "$OUT/classes" "$OUT/gen" "$OUT/dex" "$PWD/signing" "$PWD/dist"
 chmod 700 "$PWD/signing"
@@ -31,7 +40,7 @@ with zipfile.ZipFile(p/'unsigned.apk','a',zipfile.ZIP_DEFLATED) as z:
     for f in (p/'dex').glob('*.dex'): z.write(f,f.name)
 PY
 "$BT/zipalign" -P 16 -f 4 "$OUT/unsigned.apk" "$OUT/aligned.apk"
-"$BT/apksigner" sign --ks signing/release.jks --ks-key-alias dashboard --ks-pass file:signing/password.txt --out dist/personal-dashboard-1.0.0.apk "$OUT/aligned.apk"
-"$BT/apksigner" verify --verbose dist/personal-dashboard-1.0.0.apk
-sha256sum dist/personal-dashboard-1.0.0.apk > dist/SHA256SUMS
-echo "APK: $PWD/dist/personal-dashboard-1.0.0.apk"
+"$BT/apksigner" sign --ks signing/release.jks --ks-key-alias dashboard --ks-pass file:signing/password.txt --out "$APK" "$OUT/aligned.apk"
+"$BT/apksigner" verify --verbose "$APK"
+sha256sum "$APK" > dist/SHA256SUMS
+echo "APK: $PWD/$APK"
