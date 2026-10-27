@@ -95,6 +95,7 @@ async function seed(page){
       for(const type of ['todo','trans','course','deadline','trip','settings']){
         await page.evaluate(type=>openModal(type),type);await sheetBounds(page,`${width}/${type}`);
         if(mobile)assert.equal(await page.evaluate(()=>document.activeElement.id),'modalClose','entry must not automatically summon keyboard');
+        else if(type==='trans')assert.equal(await page.evaluate(()=>document.activeElement.id),'transAmount','desktop accounting should focus the amount');
         if(type==='todo'&&mobile){
           await page.setViewportSize({width,height:Math.min(height,640)});await wait(page);
           await page.locator('#todoRepeat').selectOption('每周');

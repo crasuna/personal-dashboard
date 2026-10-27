@@ -309,7 +309,7 @@ function showModal(wide = false) {
   $("#modalBody").scrollTop = 0;
   updateViewportLayout();
   // Do not open the software keyboard or jump down a long form on entry.
-  const first = isPhoneLayout() ? $("#modalClose") : $("#modalBody input:not([type=hidden]):not([type=file]), #modalBody textarea, #modalBody button");
+  const first = isPhoneLayout() ? $("#modalClose") : ($("#modalBody input:not([type=hidden]):not([type=file]), #modalBody textarea") || $("#modalBody button"));
   (first || $("#modalClose")).focus({ preventScroll: true });
 }
 function setSeg(segId, val) {
