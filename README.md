@@ -122,6 +122,8 @@ python launch.py --port 8790
 
 前端为原生 HTML / CSS / JavaScript；电脑后端仅使用 Python 标准库；安卓使用 Java + 本地 WebView。
 
+**开发、日常使用和 Git 管理共用一个项目目录。** 修改后提交、推送源码即可；运行时 `data/`、备份、同步凭据与安卓签名密钥留在本地，不进入仓库。首次克隆后运行 `git config core.hooksPath .githooks` 开启提交检查，日常更新步骤见 [安全发布说明](docs/发布说明.md)。GitHub Release 安装包需要另行打包发布，不会随推送自动更新。
+
 ```text
 static/             网页界面与同步逻辑
 server.py           本地 HTTP 服务

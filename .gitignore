@@ -6,6 +6,10 @@ db*.json
 sync-config*.json
 offline-state*.json
 device-*.json
+# JSON exports may have arbitrary names; only reviewed npm manifests are source.
+*.json
+!/package.json
+!/package-lock.json
 *.db
 *.sqlite*
 *.csv
@@ -48,3 +52,9 @@ test-results/
 playwright-report/
 .DS_Store
 Thumbs.db
+
+# Machine-specific legacy launchers / private setup notes stay on this computer.
+/启动面板.vbs
+/手机与电脑同步使用说明.md
+.local/
+*.local.*
