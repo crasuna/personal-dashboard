@@ -19,6 +19,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 from sync_bridge import SyncBridge
 from sync_validation import validate_snapshot
+from private_files import protect_private
 
 ROOT = Path(__file__).resolve().parent
 STATIC_DIR = ROOT / "static"
@@ -264,6 +265,9 @@ def extract_text(filename: str, data: bytes) -> str:
 
 def main():
     DATA_DIR.mkdir(parents=True, exist_ok=True)
+    protect_private(DATA_DIR, directory=True)
+    if SYNC_BRIDGE.path.exists():
+        protect_private(SYNC_BRIDGE.path)
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
     load_db()  # 初始化数据文件
     try:

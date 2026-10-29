@@ -15,6 +15,7 @@ import urllib.request
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import launch
 import server
+from test_private_files import assert_private
 
 
 class LaunchTests(unittest.TestCase):
@@ -57,6 +58,9 @@ class LaunchTests(unittest.TestCase):
                     self.assertEqual(len(children), 1)
                     self.assertIsNone(children[0].poll(), 'A port conflict must not kill the existing service')
                     self.assertEqual((data / 'db.json').read_bytes(), original_db)
+                # The ACL reader starts PowerShell; exclude that helper process
+                # from the launcher-only Popen accounting above.
+                assert_private(self, data, directory=True)
             finally:
                 for child in children:
                     if child.poll() is None:

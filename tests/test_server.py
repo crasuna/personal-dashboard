@@ -12,6 +12,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 import server
 from sync_bridge import SyncBridge
 from sync_validation import validate_snapshot
+from test_private_files import assert_private
 
 
 class ServerTests(unittest.TestCase):
@@ -28,7 +29,9 @@ class ServerTests(unittest.TestCase):
     def request(self,path,method='GET',data=None,headers=None):
         h={'Content-Type':'application/json'};h.update(headers or {})
         request=urllib.request.Request(f'http://127.0.0.1:{server.PORT}'+path,method=method,data=None if data is None else json.dumps(data).encode(),headers=h)
-        try:r=urllib.request.urlopen(request)
+        # Local API tests must not be routed through a machine-wide HTTP proxy.
+        opener=urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        try:r=opener.open(request)
         except urllib.error.HTTPError as e:r=e
         with r:return r.status,json.loads(r.read())
     def snapshot(self):
@@ -48,7 +51,7 @@ class ServerTests(unittest.TestCase):
         self.assertEqual(self.request('/api/save','PUT',self.snapshot(),{'If-Match':current['_revision']})[0],409)
         broken=copy.deepcopy(snap);broken['todos']=[]
         self.assertEqual(self.request('/api/save','PUT',broken,{'If-Match':current['_revision']})[0],400)
-        self.assertEqual(len(json.loads(server.DB_PATH.read_text())['todos']),1)
+        self.assertEqual(len(json.loads(server.DB_PATH.read_text(encoding='utf-8'))['todos']),1)
         self.assertEqual(len(list(server.BACKUP_DIR.glob('db-*.json'))),1)
     def test_corrupt_file_fails_closed_and_retains_bytes(self):
         server.DB_PATH.write_text('{broken')
@@ -63,7 +66,8 @@ class ServerTests(unittest.TestCase):
         headers={'X-Dashboard-Client':'sync-v1'}
         status,result=self.request('/api/sync/configSave','POST',{'email':'unit@example.invalid','password':'fake-app-secret','enabled':True},headers)
         self.assertEqual(status,200);self.assertNotIn('fake-app-secret',json.dumps(result))
-        self.assertEqual(os.stat(server.DATA_DIR/'sync-config.json').st_mode&0o777,0o600)
+        assert_private(self, server.DATA_DIR, directory=True)
+        assert_private(self, server.DATA_DIR/'sync-config.json')
         for path in ['/api/data','/api/export']:
             self.assertNotIn('fake-app-secret',json.dumps(self.request(path)[1]))
         self.assertNotIn('fake-app-secret',json.dumps(self.request('/api/sync/configGet','POST',{},headers)[1]))

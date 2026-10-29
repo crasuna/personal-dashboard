@@ -14,6 +14,7 @@ import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from private_files import protect_private
 
 BASE = 'https://dav.jianguoyun.com/dav/'
 LIMIT = 15 * 1024 * 1024
@@ -23,14 +24,15 @@ FOLDER = re.compile(r'[a-zA-Z0-9_-]{1,64}\Z')
 
 def atomic_private(path, value):
     path.parent.mkdir(parents=True, exist_ok=True)
+    protect_private(path.parent, directory=True)
     fd, tmp = tempfile.mkstemp(prefix=path.name+'.', dir=path.parent)
     try:
         with os.fdopen(fd, 'w', encoding='utf-8') as f:
+            protect_private(tmp)
             json.dump(value, f, ensure_ascii=False)
             f.flush()
             os.fsync(f.fileno())
         os.replace(tmp, path)
-        os.chmod(path, 0o600)
     finally:
         if os.path.exists(tmp):
             os.unlink(tmp)
@@ -50,6 +52,9 @@ class SyncBridge:
     def config(self):
         if not self.path.exists():
             return {'enabled': False, 'email': '', 'folder': 'personal-dashboard-v1', 'password': ''}
+        # Upgrade permissions of credentials saved by older versions before use.
+        protect_private(self.path.parent, directory=True)
+        protect_private(self.path)
         return json.loads(self.path.read_text(encoding='utf-8'))
 
     @staticmethod
