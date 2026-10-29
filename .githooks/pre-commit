@@ -1,6 +1,15 @@
 #!/bin/sh
 set -eu
-if command -v python3 >/dev/null 2>&1; then
-  exec python3 tools/check_release.py --staged
+for interpreter in python3 python; do
+  # Windows may expose a Microsoft Store alias without a usable interpreter.
+  if command -v "$interpreter" >/dev/null 2>&1 &&
+     "$interpreter" -c 'import sys; sys.exit(sys.version_info < (3, 10))' >/dev/null 2>&1; then
+    exec "$interpreter" tools/check_release.py --staged
+  fi
+done
+if command -v py >/dev/null 2>&1 &&
+   py -3 -c 'import sys; sys.exit(sys.version_info < (3, 10))' >/dev/null 2>&1; then
+  exec py -3 tools/check_release.py --staged
 fi
-exec python tools/check_release.py --staged
+echo 'Python 3.10 or newer is required for the commit safety check.' >&2
+exit 1
